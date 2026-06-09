@@ -15,14 +15,17 @@ from targets_dict import targ as targ_dict
 top_dir = '/Volumes/disks/meerap/data/'
 
 targ_name = 'FPTau'
-run = 'p1' # Whichever was chosen for fitting_casa_model.py, aka the tag in the _wtfx.ms file
+run = 'p1' # # tag used in the wtfx ms filename, if required
+tag= 'B4_hi'
 cf_date = '2026-06-05' # of the casa_fit
+wt_date = '2026-06-09' # date of statwt copy 
 shape = 'G' # 'G' or 'D' depending on whether you want the Gaussian or disk fit
 
 data_dir = top_dir + targ_name + '/'
-fit_dir = data_dir + 'casa_fit_' + cf_date + '/'
-wtfx_MS = data_dir + targ_name + '_vis_B4_hi.ms'
-cl_file = fit_dir + targ_name + '_complist_' + shape + '.cl'
+wt_dir = data_dir + 'statwt_' + wt_date + '/' # Folder containing the copied .ms directory
+cl_dir = data_dir + 'casa_fit_' + cf_date + '/' # Folder containing .cl directories
+wtfx_MS = wt_dir + targ_name + '_' + tag + '.contap1_wtfx.ms' 
+cl_file = cl_dir + targ_name + '_complist_' + shape + '.cl'
 eb_fol = data_dir + 'deproj_files_' + str(date.today()) + '/'
 
 # Remove previous runs from today, and re-make the relevant folder
