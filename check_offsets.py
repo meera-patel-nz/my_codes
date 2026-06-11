@@ -41,7 +41,7 @@ pc_DEC_arcsec = ((direction_info['m1']['value']) * u.rad).to(u.arcsec) # phase c
 
 # This code will calculate the offsets as seen when executing uvmodelfit
 
-xoff_rad = (fit_RA_rad - pc_RA_rad)
+xoff_rad = (fit_RA_rad - pc_RA_rad)*np.cos(pc_DEC_rad)
 xoff_arcsec=(fit_RA_arcsec - pc_RA_arcsec)
 
 yoff_rad = (fit_DEC_rad - pc_DEC_rad)
