@@ -19,9 +19,11 @@ top_dir = '/Volumes/disks/meerap/data/'
 targ_name = 'FPTau'
 run = 'p1' # # tag used in the wtfx ms filename, if required
 tag= 'B4_hi'
-cf_date = '2026-06-05' # of the casa_fit
+cf_date = '2026-06-11' # of the casa_fit
 wt_date = '2026-06-09' # date of statwt copy 
-shape = 'G' # 'G' or 'D' depending on whether you want the Gaussian or disk fit
+shape = 'D' # 'G' or 'D' depending on whether you want the Gaussian or disk fit
+
+# ----------- Change above this point for each disk ---------- 
 
 data_dir = top_dir + targ_name + '/'
 wt_dir = data_dir + 'statwt_' + wt_date + '/' # Folder containing the copied .ms directory
@@ -34,7 +36,7 @@ eb_fol = data_dir + 'deproj_files_' + str(date.today()) + '/'
 os.system('rm -rf ' + eb_fol)
 os.system('mkdir -p ' + eb_fol)
 
-#--------------------------------
+#--------------------- Below has updated x and y offsets using uvmodelfit RA and DEC ----------------------
 
 # Get the uvmodefit details
 
@@ -51,7 +53,6 @@ fit_DEC_arcsec=((direction['m1']['value']) * u.rad).to(u.arcsec) # units in arcs
 cl.close()
 
 # This code reads the phase centre from .ms
-
 
 ms_file = data_dir + tag + '/' + targ_name + '_vis_' + tag + '.ms'
 direction_info = listobs(vis=ms_file)['field_0']['direction'] # read .ms phase centre with listobs
@@ -72,7 +73,7 @@ xoff_arcsec=(fit_RA_arcsec - pc_RA_arcsec)* np.cos(pc_DEC_arcsec)
 yoff_rad = (fit_DEC_rad - pc_DEC_rad)
 yoff_arcsec=(fit_DEC_arcsec - pc_DEC_arcsec)
 
-#-----------------------------
+#----------------------- End of updated code ---------------------------
 
 pos_angle = comp['shape']['positionangle']['value']
 
@@ -86,16 +87,19 @@ wtfx_ev_path = eb_fol + 'exported_vis_data'
 export_vis(wtfx_MS, wtfx_ev_path)
 wtfx_ev = np.load(wtfx_ev_path + '.npz')
 
+# -------------------- Below added to match updated labels for xoff and yoff -------------------
 xoff = xoff_arcsec.value
 yoff = yoff_arcsec.value
 
 deprjvs_wtfx = deproject_vis(wtfx_ev, bins = np.arange(0, 600, 25), incl = inclination, PA = pos_angle, offx = xoff, offy = yoff)
 
+# --------------------------
+
 # Do deproject_vis on the model from uvmodelfit
 # Split off the model from the rest of the data first
 ft(vis = wtfx_MS, complist = cl_file)
 
-model_split_MS = eb_fol + '/DOTau_model_only.ms'
+model_split_MS = eb_fol + '/' + targ_name + '_model_only.ms'
 split(vis = wtfx_MS, outputvis = model_split_MS, datacolumn = 'model')
 
 model_ev_path = eb_fol + 'exported_vis_model'
