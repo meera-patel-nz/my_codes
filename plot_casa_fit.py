@@ -6,6 +6,8 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from astropy.coordinates import SkyCoord
+from casatools import table
+import astropy.units as u
 
 sys.path.append('/Volumes/disks/meerap/codes') # This is the path where calduct_tools and targets_dict are stored
 
@@ -32,41 +34,50 @@ eb_fol = data_dir + 'deproj_files_' + str(date.today()) + '/'
 os.system('rm -rf ' + eb_fol)
 os.system('mkdir -p ' + eb_fol)
 
-# Find phase center RA and DEC
-direction_info = listobs(vis = wtfx_MS)['field_0']['direction']
-pc_RA = direction_info['m0']['value'] * u.rad
-pc_DEC = direction_info['m1']['value'] * u.rad
+#--------------------------------
 
 # Get the uvmodefit details
-cl.open(cl_file)
-clist = cl.getcomponent(0)
+
+cl = componentlist() # Create a casa component list tool
+cl.open(cl_file) # open .cl file
+comp = cl.getcomponent(0) # open the first fitted component: note, there is only one component so input 0
+direction = comp['shape']['direction'] # fitted sky position of component
+
+fit_RA_rad = direction['m0']['value']   # units in radians
+fit_RA_arcsec=((direction['m0']['value']) * u.rad).to(u.arcsec) # units in arcsec
+fit_DEC_rad = direction['m1']['value']  # units in radians
+fit_DEC_arcsec=((direction['m1']['value']) * u.rad).to(u.arcsec) # units in arcsec
+
 cl.close()
 
-# Get RA and DEC from targ_dict and shift_coords
-RA_i = targ_dict[targ_name]['RA']
-DEC_i = targ_dict[targ_name]['DEC']
+# This code reads the phase centre from .ms
 
-propmot_RA = targ_dict[targ_name]['mua']
-propmot_DEC = targ_dict[targ_name]['mud']
 
-observTime = listobs(vis = wtfx_MS)['BeginTime']
+ms_file = data_dir + tag + '/' + targ_name + '_vis_' + tag + '.ms'
+direction_info = listobs(vis=ms_file)['field_0']['direction'] # read .ms phase centre with listobs
 
-RA_0, DEC_0 = shift_coords(RA_i, DEC_i, propmot_RA, propmot_DEC, observTime)
-disk_coord = SkyCoord(RA_0, DEC_0, unit = (u.hourangle, u.degree))
+# Find phase center RA and DEC
+direction_info = listobs(vis=ms_file)['field_0']['direction'] # read .ms phase centre with listobs
 
-disk_RA = disk_coord.ra.to(u.rad)
-disk_DEC = disk_coord.dec.to(u.rad)
+pc_RA_rad = direction_info['m0']['value']  # phase centre units in rad
+pc_RA_arcsec = ((direction_info['m0']['value']) * u.rad).to(u.arcsec)  # phase centre units in arcsec
+pc_DEC_rad = direction_info['m1']['value'] # phase centre units in rad
+pc_DEC_arcsec = ((direction_info['m1']['value']) * u.rad).to(u.arcsec) # phase centre units in rad
 
-pos_angle = clist['shape']['positionangle']['value'] # in degrees
-# disk_RA = clist['shape']['direction']['m0']['value'] # in rad
-# disk_DEC = clist['shape']['direction']['m1']['value'] # in rad
+# This code will calculate the offsets as seen when executing uvmodelfit
 
-# Calculate the RA/DEC offset and convert to arcsec
-offset_RA = (disk_RA - pc_RA).to(u.arcsec).value
-offset_DEC = (disk_DEC - pc_DEC).to(u.arcsec).value
+xoff_rad = (fit_RA_rad - pc_RA_rad)
+xoff_arcsec=(fit_RA_arcsec - pc_RA_arcsec)* np.cos(pc_DEC_arcsec)
 
-minoraxis = clist['shape']['minoraxis']['value'] # in arcmin
-majoraxis = clist['shape']['majoraxis']['value'] # in arcmin
+yoff_rad = (fit_DEC_rad - pc_DEC_rad)
+yoff_arcsec=(fit_DEC_arcsec - pc_DEC_arcsec)
+
+#-----------------------------
+
+pos_angle = comp['shape']['positionangle']['value']
+
+minoraxis = comp['shape']['minoraxis']['value'] # in arcmin
+majoraxis = comp['shape']['majoraxis']['value'] # in arcmin
 
 inclination = (np.arccos(minoraxis/majoraxis) * u.rad).to(u.deg) # use trigonometry to find the inclination
 
@@ -75,7 +86,10 @@ wtfx_ev_path = eb_fol + 'exported_vis_data'
 export_vis(wtfx_MS, wtfx_ev_path)
 wtfx_ev = np.load(wtfx_ev_path + '.npz')
 
-deprjvs_wtfx = deproject_vis(wtfx_ev, bins = np.arange(0, 600, 10), incl = inclination, PA = pos_angle, offx = offset_RA, offy = offset_DEC)
+xoff = xoff_arcsec.value
+yoff = yoff_arcsec.value
+
+deprjvs_wtfx = deproject_vis(wtfx_ev, bins = np.arange(0, 600, 25), incl = inclination, PA = pos_angle, offx = xoff, offy = yoff)
 
 # Do deproject_vis on the model from uvmodelfit
 # Split off the model from the rest of the data first
@@ -88,7 +102,7 @@ model_ev_path = eb_fol + 'exported_vis_model'
 export_vis(model_split_MS, model_ev_path)
 model_ev = np.load(model_ev_path + '.npz')
 
-deprjvs_model = deproject_vis(model_ev, bins = np.arange(0, 600, 10), incl = inclination, PA = pos_angle, offx = offset_RA, offy = offset_DEC)
+deprjvs_model = deproject_vis(model_ev, bins = np.arange(0, 600, 25), incl = inclination, PA = pos_angle, offx = xoff, offy = yoff)
 
 # Plot the figure
 fig = plt.figure()
