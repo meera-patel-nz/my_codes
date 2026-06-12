@@ -16,12 +16,13 @@ from targets_dict import targ as targ_dict
 
 top_dir = '/Volumes/disks/meerap/data/'
 
-targ_name = 'FPTau'
+targ_name = 'DOTau'
 run = 'p1' # # tag used in the wtfx ms filename, if required
 tag= 'B4_hi'
 cf_date = '2026-06-11' # of the casa_fit
-wt_date = '2026-06-09' # date of statwt copy 
-shape = 'D' # 'G' or 'D' depending on whether you want the Gaussian or disk fit
+wt_date = '2026-06-11' # date of statwt copy 
+shape = 'G' # 'G' or 'D' depending on whether you want the Gaussian or disk fit
+
 
 # ----------- Change above this point for each disk ---------- 
 
@@ -91,7 +92,7 @@ wtfx_ev = np.load(wtfx_ev_path + '.npz')
 xoff = xoff_arcsec.value
 yoff = yoff_arcsec.value
 
-deprjvs_wtfx = deproject_vis(wtfx_ev, bins = np.arange(0, 600, 25), incl = inclination, PA = pos_angle, offx = xoff, offy = yoff)
+deprjvs_wtfx = deproject_vis(wtfx_ev, bins = np.arange(0, 2500, 25), incl = inclination, PA = pos_angle, offx = xoff, offy = yoff)
 
 # --------------------------
 
@@ -106,7 +107,7 @@ model_ev_path = eb_fol + 'exported_vis_model'
 export_vis(model_split_MS, model_ev_path)
 model_ev = np.load(model_ev_path + '.npz')
 
-deprjvs_model = deproject_vis(model_ev, bins = np.arange(0, 600, 25), incl = inclination, PA = pos_angle, offx = xoff, offy = yoff)
+deprjvs_model = deproject_vis(model_ev, bins = np.arange(0,2500, 25), incl = inclination, PA = pos_angle, offx = xoff, offy = yoff)
 
 # Plot the figure
 fig = plt.figure()
@@ -118,6 +119,9 @@ imgax = fig.add_subplot(gs[2, 0])
 
 realax.errorbar(deprjvs_wtfx.rho_uv, abs(deprjvs_wtfx.vis_prof), yerr = deprjvs_wtfx.err_std, fmt = '.', label = 'Data')
 realax.plot(deprjvs_model.rho_uv, abs(deprjvs_model.vis_prof), '-', color = 'tab:red', label = 'Model')
+
+realax.axhline(y=0, color='k', linestyle='--', linewidth=1)
+
 realax.set_title(targ_name)
 realax.set_ylabel('real amplitude (Jy)') # Not 100% positive about the units
 realax.xaxis.set_ticklabels([])
@@ -125,6 +129,9 @@ realax.legend()
 
 imgax.errorbar(deprjvs_wtfx.rho_uv/1e3, (1j * deprjvs_wtfx.vis_prof), yerr = deprjvs_wtfx.err_std, fmt = '.')
 imgax.plot(deprjvs_model.rho_uv/1e3, (1j * deprjvs_model.vis_prof), '-', color = 'tab:red')
+
+imgax.axhline(y=0, color='k', linestyle='--', linewidth=1)
+
 imgax.set_ylabel('img amplitude (Jy)')
 imgax.set_xlabel('uv distance (klam)')
 
