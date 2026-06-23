@@ -44,19 +44,42 @@ cl.addcomponent(
     shape='Gaussian'
 )
 
-'''
-project_folder = '/Volumes/disks/meerap/data/modelTau/simulations/DOTau_sim/'
+
+project_folder = '/Volumes/disks/meerap/data/modelTau/DOTau_sim/'
 skymodel_path = '/Volumes/disks/meerap/data/modelTau/DOTau_gaussian.image/'
 complist_path = '/Volumes/disks/meerap/data/modelTau/DOTau_gaussian.cl/'
+antennalist_path = '/soft/casa-6.6.0-20-py3.8.el7/lib/py/lib/python3.8/site-packages/casadata/__data__/alma/simmos/alma.cycle5.1.cfg'
 
-# Delete old folder if exists
+# use os system to copy /soft/casa-6.6.0-20-py3.8.el7/lib/py/lib/python3.8/site-packages/casadata/__data__/alma/simmos/alma.cycle5.1.cfg into the folder, DOTau_sim (project_folder) and .image and .cl are one directory above (in modelTau).
+
+
+# Delete old folder if exists - may need to move this up or down - will this delete the project i literally just made??
+
+# Delete old folder if it exists using rm -rf
+if os.path.exists(project_folder):
+    os.system(f'rm -rf {project_folder}')
+    print(f"Deleted previous simulation folder: {project_folder}")
+
+# Recreate the folder
+os.makedirs(project_folder, exist_ok=True)
+print(f"Created simulation folder: {project_folder}")
 
 #if os.path.exists(project_folder):
 #    os.system(f'rm -rf {project_folder}')
 
 #generate measurement set
 
-simobserve(project=project_folder, skymodel=skymodel_path, complist=complist_path, inbright='0.0484384Jy', antennalist='alma.cycle5.1.cfg', totaltime='180s', obsmode='int', mapsize='10arcsec', incell='0.05arcsec', overwrite=True)
+simobserve(
+        project=project_folder,
+        skymodel=skymodel_path,
+        complist=complist_path,
+        inbright='0.0484384Jy',
+        antennalist=antennalist_path,
+        totaltime='180s',
+        obsmode='int',
+        mapsize='10arcsec',
+        incell='0.05arcsec',
+        overwrite=True)
 
 from casatools import image
 ia = image()
@@ -70,5 +93,5 @@ print("Pixels along one axis:", n_pix)
 
 print("Major axis:", maj)
 print("Minor axis:", minr)
-'''
+
 
