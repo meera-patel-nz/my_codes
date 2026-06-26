@@ -14,15 +14,15 @@ os.system('rm -rf ' + imagename_no_noise + '.*')
 os.system('rm -rf ' + imagename_noisy + '.*')
 
 tclean(
-    vis= vis_noisy,
-    imagename= imagename_noisy,
+    vis= vis_no_noise,
+    imagename= imagename_no_noise,
     spw='',
     specmode='mfs',
     gridder='standard',
     imsize=[1024, 1024],
-    cell='0.02arcsec',
+    cell='0.2arcsec',
     weighting="briggs",
-    robust=0.5,
+    robust=2.0,
     niter=0,
     interactive=False
 )
