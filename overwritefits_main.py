@@ -63,9 +63,8 @@ plt.show()
 
 # overwrite fits (replace data to values calculated in f)
 
-new_data = np.zeros_like(data)
+HDUlist[0].data = f.reshape(data.shape).astype(data.dtype)
 
-HDUlist[0].data = new_data
 HDUlist.writeto(out_path, overwrite=True)
 HDUlist.close()
 
