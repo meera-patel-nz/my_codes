@@ -2,27 +2,48 @@ from casatasks import simobserve
 from casatools import componentlist
 import os
 
-cl.done()
+sim_folder = '/Volumes/disks/meerap/data/DOTau/simulation'
+fits_file = os.path.join(sim_folder, 'DOTau_B4_hi_gaussian.fits')
+image_file = os.path.join(sim_folder, 'DOTau_gaussian.image')
+cl_file = os.path.join(sim_folder, 'DOTau_gaussian.cl')
+project_name = 'DOTau_sim'
+project_folder = os.path.join(sim_folder, project_name)
 
-cl_file = '/Volumes/disks/meerap/data/modelTau/DOTau_gaussian.cl'
-print('cl file name:', cl_file)
-os.system(f'rm -rf {cl_file}')
-cl.close()
-
-if os.path.exists("cl_file"):
-    rmtables("cl_file")
-    cl.done()
-
-# Delete previous CASA image if it exists
-image_file = 'DOTau_gaussian.image'
 if os.path.exists(image_file):
     os.system(f'rm -rf {image_file}')
-    print(f"Deleted previous CASA image: {image_file}")
+
+importfits(fitsimage=fits_file,
+           imagename=image_file,
+           overwrite=True)
+
+if os.path.exists(cl_file):
+    os.system(f'rm -rf {cl_file}')
+    print(f"Deleted previous component list: {cl_file}")
+    rmtables(cl_file)  # clean CASA tables if present
+
+if os.path.exists(project_folder):
+    os.system(f'rm -rf {project_folder}')
+os.makedirs(project_folder, exist_ok=True)
+
+#cl_file = '/Volumes/disks/meerap/data/DOTau/simulation/DOTau_gaussian.cl'
+#print('cl file name:', cl_file)
+#os.system(f'rm -rf {cl_file}')
+#cl.close()
+
+#if os.path.exists("cl_file"):
+ #   rmtables("cl_file")
+  #  cl.done()
+
+# Delete previous CASA image if it exists
+#image_file = '/Volumes/disks/meerap/data/DOTau/simulation/DOTau_gaussian.image'
+#if os.path.exists(image_file):
+   # os.system(f'rm -rf {image_file}')
+  #  print(f"Deleted previous CASA image: {image_file}")
 
 # Import the Gaussian FITS
-importfits(fitsimage='DOTau_B4_hi_gaussian.fits',
-           imagename='DOTau_gaussian.image',
-           overwrite=True)
+#importfits(fitsimage='DOTau_B4_hi_gaussian.fits', 
+#           imagename='DOTau_gaussian.image',
+ #          overwrite=True)
 
 # Create component list
 cl = componentlist()
@@ -43,12 +64,9 @@ cl.addcomponent(
     positionangle= posang,         # PA after correction
     shape='Gaussian'
 )
-cl.rename('DOTau_gaussian.cl')
+cl.rename(cl_file)
 cl.close()
 
-project_folder = 'DOTau_sim'
-skymodel_path = '/Volumes/disks/meerap/data/modelTau/DOTau_gaussian.image/'
-complist_path = '/Volumes/disks/meerap/data/modelTau/DOTau_gaussian.cl/'
 antennalist_path = '/soft/casa-6.6.0-20-py3.8.el7/lib/py/lib/python3.8/site-packages/casadata/__data__/alma/simmos/alma.cycle5.1.cfg'
 
 # use os system to copy /soft/casa-6.6.0-20-py3.8.el7/lib/py/lib/python3.8/site-packages/casadata/__data__/alma/simmos/alma.cycle5.1.cfg into the folder, DOTau_sim (project_folder) and .image and .cl are one directory above (in modelTau).
@@ -68,15 +86,17 @@ print(f"Created simulation folder: {project_folder}")
 #generate measurement set
 
 simobserve(
-        project=project_folder,
-        skymodel=skymodel_path,
-        complist=complist_path,
+        project=project_name,
+        skymodel=image_file,
+        complist=cl_file,
         inbright='0.0484384Jy',
         antennalist=antennalist_path,
         totaltime='180s',
         obsmode='int',
         mapsize='10arcsec',
         incell='0.05arcsec',
+        thermalnoise='tsys-atm',
+        user_pwv=0.5,
         overwrite=True)
 
 
