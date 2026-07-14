@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # STEP 0: EDIT THESE
 # ============================================================
 targ = 'DOTau'
-trial = '020'
+trial = '023'
 bandwidth_GHz = '7.5'
 mtype = 'gauss'
 
