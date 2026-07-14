@@ -1,7 +1,7 @@
 import numpy as np
 
 target = 'DOTau'
-trial = '020'
+trial = '023'
 bandwidth = '7.5'
 path = '/Volumes/disks/meerap/data/' + target + '/simulation/' + target + '_sim_' + trial + '/' + 'visfit/'
 
