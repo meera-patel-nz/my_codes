@@ -59,3 +59,9 @@ SNR = peak_flux / rms_flux
 print("Peak flux:", peak_flux)
 print("RMS flux:", rms_flux)
 print("SNR:", SNR)
+
+exportfits(
+    imagename='/Volumes/disks/meerap/data/' + targ_name + '/simulation/' + targ_name + '_sim_' + trial + '/' + targ_name + '_' + trial + '_noisy_clean.image',
+    fitsimage='/Volumes/disks/meerap/data/' + targ_name + '/simulation/' + targ_name + '_sim_' + trail + '/' + targ_name + '_'+ trial + '_noisy_clean.fits',
+    overwrite=True
+)
