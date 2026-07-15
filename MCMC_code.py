@@ -22,7 +22,7 @@ from calduct_tools import deproject_vis # This uses Jillian's deproject_vis, not
 
 # Choose target
 targ = 'DOTau'
-trial = '023'
+trial = '020'
 tag = 'B4_hi'
 deproj_date = '2026-07-01' # I don't have deproject at the moment
 wgt_rescl = 1 # Weight rescaling factor - ??? 
@@ -99,10 +99,6 @@ if not append:
     os.system('rm -rf ' + postdir)
 os.system('mkdir -p ' + postdir)
 
-if not append:
-    os.system('rm -rf ' + postdir)
-os.system('mkdir -p ' + postdir)
-
 """ ======================================================================= """
 
 # prior evaluators
@@ -139,7 +135,7 @@ if mtype == 'gauss':
         theta = 0.5 * np.pi - np.radians(PA)
         mu = np.cos(np.radians(incl))
         scl = np.pi / (180 * 3600) # Convert arcsec to radians
-        sigma_radians = pars[3] * scl
+        sigma_radians = sigma * scl
         uu = (u * np.cos(theta) + v * np.sin(theta)) * sigma_radians
         vv = (-u * np.sin(theta) + v * np.cos(theta)) * sigma_radians * mu # Has been rotated so that all "stretch" is along this axis
 
@@ -148,7 +144,7 @@ if mtype == 'gauss':
         mvis = flux * np.exp(-2 * np.pi**2 * uuvv**2) + 1j*np.zeros_like(uuvv)
 
         # phase shift to treat the offsets
-        dx_rad = -dx * scl,
+        dx_rad = -dx * scl
         dy_rad = -dy * scl
         phase_shift = np.exp(-2 * np.pi * 1j*(u * dx_rad + v * dy_rad))
         mvis *= phase_shift
@@ -200,7 +196,7 @@ def log_likelihood(pars, u, v, vis, wgt):
 # log-posterior
 def log_posterior(pars, u, v, vis, wgt):
 
-    lp = log_priors(pars)
+    lp = log_prior(pars)
 
     if np.isfinite(lp):
         return log_likelihood(pars, u, v, vis, wgt) + lp
@@ -244,15 +240,10 @@ if append:
         pre_logpost = np.load(postdir+outfile+'.post.npz')['logpost']
         p00 = pre_samples[-1,:,:]
 
-    p00 = pre_samples[-1, :, ;]
-
     if p00.shape[1] != ndim:
             raise ValueError(
-                'Previous chain has '
-                + str(p00.shape[1])
-                + ' parameters, but this model expects '
-                + str(ndim)
-            )
+                'Previous chain has '+ str(p00.shape[1]) + ' parameters, but this model expects ' + str(ndim))
+    
     else:
         print('I cannot find the file to append samples.  Exiting')
         sys.exit()
@@ -357,13 +348,11 @@ print(_samples.shape, samples_.shape)
 9. Format every panel consistently
 '''
 
-corner_samples = samples_.copy
+corner_samples = samples_.copy()
 corner_samples[:,0] *= 1e3
 
 if corner_samples.shape[1] !=ndim:
-    raise ValueError(
-            'Corner-plot samples contain ' + str(corner_samples.shape[1] + ' parameters, but ndim is ' + str(ndim)
-)
+    raise ValueError('Corner-plot samples contain ' + str(corner_samples.shape[1]) + ' parameters, but ndim is ' + str(ndim))
 
 print('Corner-plot sample shape:', corner_samples.shape)
 
@@ -401,7 +390,6 @@ fig = corner.corner(
     bins=30,               # Number of histogram bins
     smooth = 1.0,          # Smooth the two-dimensional density and contours slightly
     smooth1d=1.0,          # Smooth the one-dimensional histograms slightly
-    smooth1d=1.0,
     levels=corner_levels,  # Draw one-, two-, and three-sigma contour regions
     show_titles=True,      # Show a numerical posterior summary above each diagonal histogram
     title_quantiles=[0.1585, 0.5, 0.8415], # Use the 15.85th, 50th, and 84.15th percentiles for: lower uncertainty, median, and upper uncertainty
@@ -444,7 +432,7 @@ for row in range(ndim):
         ax = axes[row, col]
         if ax.get_visible():
             ax.set_box_aspect(1)
-         ax.tick_params(
+        ax.tick_params(
             axis='both',
             which='major',
             labelsize=8,
@@ -452,14 +440,14 @@ for row in range(ndim):
             length=4,
             width=0.8
         )
-         ax.xaxis.set_major_locator(
+        ax.xaxis.set_major_locator(
             plt.MaxNLocator(4)
         )
 
         ax.yaxis.set_major_locator(
             plt.MaxNLocator(4)
         )
-         if row == ndim - 1:
+        if row == ndim - 1:
             for tick_label in ax.get_xticklabels():
                 tick_label.set_rotation(30)
                 tick_label.set_horizontalalignment('right')
@@ -497,6 +485,64 @@ plt.show(block=True)
 
 plt.close(fig)
 
+### Save simple marginalized posterior summaries
+
+# Make a copy so that converting flux to mJy does not change samples_
+summary_samples = samples_.copy()
+
+# Convert the flux column from Jy to mJy for reporting
+summary_samples[:, 0] *= 1e3
+
+# Calculate the 15.85th, 50th, and 84.15th percentiles
+clevs = [15.85, 50.0, 84.15]
+CI = np.percentile(summary_samples, clevs, axis=0)
+
+# Open the output text file
+output = open(
+    postdir + outfile + '.output.txt',
+    'w'
+)
+
+# Write the weighted average frequency
+output.write('\nnu = %.2f GHz' % freq)
+
+# Write the median and upper/lower uncertainties for every parameter
+for j in range(len(plbls)):
+    output.write(
+        '\n%s = %.3f +%.3f / -%.3f %s'
+        % (
+            plbls[j],
+            CI[1, j],
+            CI[2, j] - CI[1, j],
+            CI[1, j] - CI[0, j],
+            punits[j]
+        )
+    )
+
+output.flush()
+output.close()
+
+""" True-versus-recovered sanity checks """
+
+print('True input flux (Jy):', true_flux_Jy)
+print('Recovered median flux (Jy):', CI[1, 0] * 1e-3)
+
+print('True sigma (arcsec):', true_sigma)
+print('Recovered median sigma (arcsec):', CI[1, 3])
+
+print('True dx (arcsec):', true_dx)
+print('Recovered median dx (arcsec):', CI[1, 1])
+
+print('True dy (arcsec):', true_dy)
+print('Recovered median dy (arcsec):', CI[1, 2])
+
+print('True PA (deg):', true_PA)
+print('Recovered median PA (deg):', CI[1, 4])
+
+print('True inclination (deg):', true_inc)
+print('Recovered median inclination (deg):', CI[1, 5])
+
+print('Recovered median logf:', CI[1, 6])
 
 ### plot the pairwise covariances - original code (edited verison above)]
 
