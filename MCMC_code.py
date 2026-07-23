@@ -11,31 +11,18 @@ import corner
 sys.path.append('/Volumes/disks/meerap/codes') # pulls mcmc_tools.py copied into codes directory 
 from mcmc_tools import * 
 
-"""
-sys.path.append('/Volumes/disks/jillian/data/my_code') # edit path 
-from calduct_tools import deproject_vis # This uses Jillian's deproject_vis, not Sean's
-"""
-
 ### User Controls
 
 """ User definitions and setups """
 
 # Choose target
 targ = 'DOTau'
-trial = '020'
+trial = '029'
 tag = 'B4_hi'
-deproj_date = '2026-07-01' # I don't have deproject at the moment
-wgt_rescl = 1 # Weight rescaling factor - ??? 
+wgt_rescl = 0.33 # Weight rescaling factor - ??? 
 mtype = 'gauss' # model type 
-bandwidth_GHz = '7.5' # change per run!
+bandwidth_GHz = '1.875' # change per run!
 outfile = targ + '.' + mtype + '.trial' + trial + '.' + bandwidth_GHz + 'GHz' # Assign the output filename prefix
-
-''' code for while these were fixed - need to update? 
-p = -66.6743                  # raw rotation angle from your sky model (deg)
-PA = -p - 90                  # convert to the convention vis_model expects
-# PA = -(-66.6743) - 90 = 66.6743 - 90 = -23.3257
-axis_ratio = 0.557551          # confirm this is trial 020's actual axis ratio!
-'''
 
 # simulated data (true inputs)
 true_flux_Jy = 0.05
@@ -44,7 +31,7 @@ true_sigma = true_FWHM / 2.354
 true_dx = 0.0639611
 true_dy = -0.487347
 true_angle = -66.6743 
-true_PA = -true_angle-90
+true_PA = (-true_angle-90) % 180.0
 true_axis_ratio = 0.557551 
 true_inc = np.degrees(np.arccos(true_axis_ratio))
 
@@ -53,6 +40,7 @@ visdir = '/Volumes/disks/meerap/data/' + targ + '/simulation/' + targ + '_sim_' 
 
 # prior information
 uvlim = 1000. # Used to truncate uv data - why would we want to do this? - if data set gets complicated at longer lambda, truncate and fit gaussian at shorter wavelengths. (effectively fitting all baselines as 1000 big number)
+
 pri_type = [
         'uniform', # flux
         'normal', # dx
@@ -65,10 +53,10 @@ pri_type = [
 
 pri_pars = [
         [0, 0.15],
-        [true_dx, 0.1],
-        [true_dy, 0.1],
+        [true_dx, 0.025],
+        [true_dy, 0.025],
         [0.1, 5.0],
-        [-90.0, 90.0],
+        [0.0, 180.0],
         [0.0, 89.0],
         [-20.0, 10.0]] # "prior parameters" Edit for simulated disk !!
 
@@ -95,9 +83,8 @@ cutfactor = 100
 
 # location of posteriors subdirectory
 postdir = visdir + 'visfit/' # Folder from which to start if previous walkers exist, or folder in which to dump everything
-if not append:
-    os.system('rm -rf ' + postdir)
-os.system('mkdir -p ' + postdir)
+postdir = os.path.join(visdir, 'visfit/')
+os.makedirs(postdir, exist_ok=True)
 
 """ ======================================================================= """
 
@@ -207,31 +194,53 @@ def log_posterior(pars, u, v, vis, wgt):
 # caution with internal multithreading
 if (nthread > 1): os.environ["OMP_NUM_THREADS"] = "1"
 
-# Load the visibility data - need to script producing this file!!
-_ = np.load(visdir + 'exported_vis_data_' + trial + '.npz')
-u_, v_, vis_, wgt_, nu = _['u'], _['v'], _['Vis'], _['Wgt'], _['nu']
-wgt_ *= wgt_rescl
-freq = np.average(nu, weights=wgt_) / 1e9
 
-""" Unit checks - wavelength should be roughly 1-3mm,"""
+# ------------------------------------------------------------------
+# Load visibility data
+# ------------------------------------------------------------------
+npz_file = os.path.join(visdir, f'exported_vis_data_{trial}.npz')
+print('Loading visibility data from:', npz_file)
+if not os.path.exists(npz_file):
+    raise FileNotFoundError(f'Visibility file does not exist: {npz_file}')
 
-print('--- UNIT CHECKS ---')
-print('u range:', u_.min(), u_.max())         # meters would be ~1-10000ish; wavelengths ~1e3-1e6ish
-print('v range:', v_.min(), v_.max())
-print('nu range (Hz):', nu.min(), nu.max())
-print('Vis dtype:', vis_.dtype)                # should be complex
-print('Vis amplitude range:', np.abs(vis_).min(), np.abs(vis_).max())
-print('Wgt range:', wgt_.min(), wgt_.max())
-print('number of visibility points:', len(u_))
-print('freq (weighted avg, GHz):', freq)
+with np.load(npz_file) as data:
+    required_keys = {'u', 'v', 'Vis', 'Wgt', 'nu'}
+    missing = required_keys.difference(data.files)
+    if missing:
+        raise KeyError(f'Missing required NPZ keys: {sorted(missing)}')
+    u_, v_, vis_, wgt_, nu = (np.asarray(data[k]).copy() for k in ('u', 'v', 'Vis', 'Wgt', 'nu'))
 
-# truncate u,v data if necessary (set uvlim large enough to include everythingm or delete truncation for zero cropping)
-uv_data = np.sqrt(u_**2 + v_**2)
-u = u_[uv_data <= 1e3 * uvlim]
-v = v_[uv_data <= 1e3 * uvlim]
-vis = vis_[uv_data <= 1e3 * uvlim]
-wgt = wgt_[uv_data <= 1e3 * uvlim]
+if not (u_.shape == v_.shape == vis_.shape == wgt_.shape == nu.shape):
+    raise ValueError('u, v, Vis, Wgt, and nu do not have matching shapes.')
+if not np.iscomplexobj(vis_):
+    raise TypeError('Vis is not a complex array. Check the NPZ export script.')
 
+# Flatten to 1D vectors
+u_, v_, vis_, wgt_, nu = (a.ravel() for a in (u_, v_, vis_, wgt_, nu))
+wgt_ *= wgt_rescl  # global weight correction
+
+# Remove unusable points, then apply uv cutoff (uvlim is in klambda)
+valid = np.isfinite(u_) & np.isfinite(v_) & np.isfinite(vis_.real) & \
+        np.isfinite(vis_.imag) & np.isfinite(wgt_) & np.isfinite(nu) & (wgt_ > 0.0)
+uv_cutoff = 1e3 * uvlim
+keep = valid & (np.sqrt(u_**2 + v_**2) <= uv_cutoff)
+
+u, v, vis, wgt, nu_fit = u_[keep], v_[keep], vis_[keep], wgt_[keep], nu[keep]
+if len(u) == 0:
+    raise ValueError('No valid visibility data remain after filtering.')
+
+freq = np.average(nu_fit, weights=wgt) / 1e9
+actual_bandwidth_GHz = (np.nanmax(nu_fit) - np.nanmin(nu_fit)) / 1e9
+
+print('Valid fraction:', np.mean(valid), '| Removed:', np.sum(~valid))
+print(f'Fitted {len(u)}/{len(u_)} points ({len(u)/len(u_):.2%})')
+print('u range:', np.nanmin(u), np.nanmax(u), '| v range:', np.nanmin(v), np.nanmax(v))
+print('Max uv distance:', np.nanmax(np.sqrt(u**2 + v**2)), '| UV cutoff:', uv_cutoff, 'lambda')
+print('Freq range [Hz]:', np.nanmin(nu_fit), np.nanmax(nu_fit))
+print('Weighted avg freq [GHz]:', freq, '| Actual span [GHz]:', actual_bandwidth_GHz,
+      '| Requested label [GHz]:', bandwidth_GHz)
+print('Vis dtype:', vis.dtype, '| amp range:', np.nanmin(np.abs(vis)), np.nanmax(np.abs(vis)))
+print('Weight range:', np.nanmin(wgt), np.nanmedian(wgt), np.nanmax(wgt))
 
 # Initialize the walkers, starting from the previous run
 if append:
@@ -240,7 +249,7 @@ if append:
         pre_logpost = np.load(postdir+outfile+'.post.npz')['logpost']
         p00 = pre_samples[-1,:,:]
 
-    if p00.shape[1] != ndim:
+        if p00.shape[1] != ndim:
             raise ValueError(
                 'Previous chain has '+ str(p00.shape[1]) + ' parameters, but this model expects ' + str(ndim))
     
@@ -316,7 +325,7 @@ _samples  = np.delete(samples, out_ix, axis=1) # _samples is samples thinned in 
 _logposts = np.delete(logpost, out_ix, axis=1)
 _nwalk = _samples.shape[1]
 
-fig, ax = plt.subplots(nrows=ndim+1, ncols=1, figsize=(5., 8.),
+fig, ax = plt.subplots(nrows=ndim+1, ncols=1, figsize=(6, 12),
                         constrained_layout=True, sharex=True)
 _samples[:,:,0] *= 1e3
 blob = np.dstack((_samples, np.reshape(_logposts, (nstep, _nwalk, 1))))
@@ -371,7 +380,7 @@ corner_ranges = [
     (-0.2, 0.3),        # dx [arcsec]
     (-0.8, -0.2),       # dy [arcsec]
     (0.01, 0.6),        # sigma [arcsec]
-    (-90.0, 90.0),      # PA [deg]
+    (0.0, 180.0),      # PA [deg]
     (0.0, 89.0),        # inclination [deg]
     (-20.0, 10.0)       # logf
 ]
@@ -382,107 +391,67 @@ corner_levels = (
     1.0 - np.exp(-0.5 * 3.0**2)
 )
 
+
+n_params = corner_samples.shape[1]  # should be ndim
+
 fig = corner.corner(
     corner_samples,
-    labels=corner_labels,  # Axis labels, in parameter-column order
-    range=corner_ranges,   # Keep axis limits consistent across runs
-    figsize=(15, 15),      # A square overall figure helps keep each individual panel square
-    bins=30,               # Number of histogram bins
-    smooth = 1.0,          # Smooth the two-dimensional density and contours slightly
-    smooth1d=1.0,          # Smooth the one-dimensional histograms slightly
-    levels=corner_levels,  # Draw one-, two-, and three-sigma contour regions
-    show_titles=True,      # Show a numerical posterior summary above each diagonal histogram
-    title_quantiles=[0.1585, 0.5, 0.8415], # Use the 15.85th, 50th, and 84.15th percentiles for: lower uncertainty, median, and upper uncertainty
-    title_fmt='.3f',       # Number of decimal places in the titles
-    title_kwargs={
-        'fontsize': 11,
-        'pad': 12
-    },
-
-    # Draw dotted vertical lines on the diagonal histograms at the
-    # lower percentile, median, and upper percentile
+    labels=corner_labels,
+    range=corner_ranges,
+    figsize=(2.6 * n_params, 2.6 * n_params),  # scales with number of params -- key fix
+    bins=30,
+    smooth=1.0,
+    smooth1d=1.0,
+    levels=corner_levels,
+    show_titles=True,
+    title_quantiles=[0.1585, 0.5, 0.8415],
+    title_fmt='.2f',                # fewer decimals = shorter titles = less overlap
+    title_kwargs={'fontsize': 8, 'pad': 4},
     quantiles=[0.1585, 0.5, 0.8415],
-    # Show the individual posterior samples faintly in the lower triangle
     plot_datapoints=True,
-    # Show the estimated two-dimensional density
     plot_density=True,
-    # Show contour outlines
     plot_contours=True,
-    # Fill the contour regions
     fill_contours=True,
-    # Keep the sample points faint so that the contours remain readable
-    data_kwargs={'alpha': 0.10, 'markersize': 1.5},
-    # Axis-label formatting
-    label_kwargs={'fontsize': 12, 'labelpad': 20},
-    # One-dimensional histogram formatting
-    hist_kwargs={'linewidth': 1.2},
-    # Two-dimensional contour formatting
-    contour_kwargs={'linewidths': 1.2},
-    # Limit the number of displayed tick marks on each axis
-    max_n_ticks=4,
-    # Display numerical values using normal decimal notation where possible
+    data_kwargs={'alpha': 0.10},
+    label_kwargs={'fontsize': 8, 'labelpad': 6},
+    hist_kwargs={'linewidth': 1.0},
+    contour_kwargs={'linewidths': 1.0},
+    max_n_ticks=3,                   # fewer tick marks = less clutter
     use_math_text=True
 )
 
-axes = np.array(fig.axes).reshape((ndim, ndim))
+axes = np.array(fig.axes).reshape((n_params, n_params))
 
-for row in range(ndim):
-    for col in range(ndim):
-
+for row in range(n_params):
+    for col in range(n_params):
         ax = axes[row, col]
-        if ax.get_visible():
-            ax.set_box_aspect(1)
-        ax.tick_params(
-            axis='both',
-            which='major',
-            labelsize=8,
-            pad=7,
-            length=4,
-            width=0.8
-        )
-        ax.xaxis.set_major_locator(
-            plt.MaxNLocator(4)
-        )
+        if col > row:
+            continue  # upper triangle is empty/unused -- skip formatting it
 
-        ax.yaxis.set_major_locator(
-            plt.MaxNLocator(4)
-        )
-        if row == ndim - 1:
+        ax.tick_params(axis='both', which='major', labelsize=7, pad=3, length=3, width=0.6)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(3))
+        ax.yaxis.set_major_locator(plt.MaxNLocator(3))
+
+        if row == col:
+            # diagonal histograms: hide the 0-1 density axis entirely -- not meaningful, was the main source of clutter
+            ax.set_yticks([])
+            ax.set_yticklabels([])
+
+        if row == n_params - 1:
             for tick_label in ax.get_xticklabels():
-                tick_label.set_rotation(30)
+                tick_label.set_rotation(45)
                 tick_label.set_horizontalalignment('right')
+            ax.xaxis.labelpad = 10
 
-            # Increase the distance between the bottom tick values and
-            # the x-axis parameter label.
-            ax.xaxis.labelpad = 24
         if col == 0 and row > 0:
-            ax.yaxis.labelpad = 28
-        ax.ticklabel_format(
-            axis='both',
-            style='plain',
-            useOffset=False
-        )
-fig.subplots_adjust(
-    left=0.12,
-    right=0.98,
-    bottom=0.12,
-    top=0.96,
-    wspace=0.10,
-    hspace=0.10
-)
+            ax.yaxis.labelpad = 10
+
+fig.subplots_adjust(left=0.09, right=0.98, bottom=0.09, top=0.93, wspace=0.12, hspace=0.06)
 
 corner_file = postdir + outfile + '.corner.png'
-
-fig.savefig(
-    corner_file,
-    dpi=300,
-    facecolor='white'
-)
-
+fig.savefig(corner_file, dpi=200, facecolor='white')
 print('Corner plot saved to:', corner_file)
-
 plt.show(block=True)
-
 plt.close(fig)
 
 ### Save simple marginalized posterior summaries
@@ -544,37 +513,14 @@ print('Recovered median inclination (deg):', CI[1, 5])
 
 print('Recovered median logf:', CI[1, 6])
 
-### plot the pairwise covariances - original code (edited verison above)]
 
-'''samples_[:,0] *= 1e3
-fig = corner.corner(samples_, 
-                    levels=(1-np.exp(-0.5*(np.array([1, 2, 3]))**2)), 
-                    labels=plbls) # Breaks if number of steps is too small :(
-plt.savefig(postdir+outfile+'.corner.png')
-plt.show(block=True)
+true_pars = np.array([true_flux_Jy, true_dx, true_dy, true_sigma, true_PA, true_inc, -15.0])
+
+lp_true = log_posterior(true_pars, u, v, vis, wgt)
+lp_best = log_posterior(bestfit_pars, u, v, vis, wgt)
+
+print('log_posterior at TRUE params:     ', lp_true)
+print('log_posterior at BEST-FIT params: ', lp_best)
+print('difference (best - true):         ', lp_best - lp_true)
 
 
-### save simple marginalized posterior summaries # Add printing this out to a file.
-output = open(postdir + outfile + '.output.txt', 'w')
-
-clevs = [15.85, 50., 84.15]
-CI = np.percentile(samples_, clevs, axis=0)
-output.write('\nnu = %.2f GHz' % freq)
-for j in range(len(plbls)):
-    output.write('\n%s = %.3f +%.3f / -%.3f %s' % \
-            (plbls[j], CI[1,j], CI[2,j]-CI[1,j], CI[1,j]-CI[0,j], punits[j]))
-
-output.flush()
-output.close()
-
-""" Print flux and sigma checks , orders of magnitude sanity check!!"""
-
-print('True input flux (Jy):', true_flux_Jy)
-print('Recovered flux:', CI[1,0]*10^-3)
-print('True sigma (arcsec):', true_sigma)
-print('Recovered sigma (arcsec):', CI[1,3])
-print('True dx (arcsec):', true_dx)
-print('Recovered dx (arcsec):', CI[1,1])
-print('True dy (arcsec):', true_dy)
-print('Recovered dy (arcsec):', CI[1,2])
-'''
